@@ -1,0 +1,48 @@
+version: "1.0"
+
+project:
+  name: "demo-monorepo"
+  description: "Demo monorepo for testing Conductor"
+
+subprojects:
+  auto_detect:
+    enabled: false
+  explicit:
+    - path: "api"
+      name: "API Service"
+      language: "typescript"
+      testCommand: "pnpm test"
+      buildCommand: "pnpm build"
+    - path: "web"
+      name: "Web Application"
+      language: "typescript"
+      testCommand: "pnpm test"
+      buildCommand: "pnpm build"
+    - path: "shared"
+      name: "Shared Utilities"
+      language: "typescript"
+      testCommand: "pnpm test"
+      buildCommand: "pnpm build"
+
+agents:
+  master:
+    model: "claude-sonnet-4-20250514"
+    maxTurns: 20
+  sub_agent:
+    model: "claude-sonnet-4-20250514"
+    maxParallel: 3
+    timeoutMinutes: 15
+  code_review:
+    model: "claude-sonnet-4-20250514"
+
+workflow:
+  triggers:
+    startColumn: "Todo"
+  branchPattern: "conductor/{task_id}/{short_description}"
+
+security:
+  blockedPatterns:
+    - "**/.env"
+    - "**/secrets/**"
+  maxFilesPerPr: 20
+  maxLinesPerPr: 500

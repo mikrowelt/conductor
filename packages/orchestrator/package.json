@@ -1,0 +1,32 @@
+{
+  "name": "@conductor/orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@conductor/core": "workspace:*",
+    "@conductor/agents": "workspace:*",
+    "@anthropic-ai/sdk": "^0.27.0",
+    "@octokit/rest": "^20.0.2",
+    "glob": "^10.3.10"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "vitest": "^1.1.0"
+  }
+}

@@ -1,0 +1,100 @@
+version: '3.8'
+
+name: conductor-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: conductor-postgres
+    environment:
+      POSTGRES_USER: conductor
+      POSTGRES_PASSWORD: conductor
+      POSTGRES_DB: conductor
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../../packages/core/src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conductor"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: conductor-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  smee:
+    image: node:20-alpine
+    container_name: conductor-smee
+    command: npx smee-client -u ${WEBHOOK_PROXY_URL} -t http://webhook-server:3000/api/github/webhooks
+    environment:
+      - WEBHOOK_PROXY_URL=${WEBHOOK_PROXY_URL}
+    depends_on:
+      - webhook-server
+    profiles:
+      - smee
+
+  webhook-server:
+    build:
+      context: ../..
+      dockerfile: config/docker/Dockerfile.webhook-server
+    container_name: conductor-webhook-server
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://conductor:conductor@postgres:5432/conductor
+      - REDIS_URL=redis://redis:6379
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_PRIVATE_KEY_PATH=/secrets/github-app.pem
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LOG_LEVEL=debug
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../../secrets:/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - app
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: config/docker/Dockerfile.worker
+    container_name: conductor-worker
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://conductor:conductor@postgres:5432/conductor
+      - REDIS_URL=redis://redis:6379
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_PRIVATE_KEY_PATH=/secrets/github-app.pem
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LOG_LEVEL=debug
+    volumes:
+      - ../../secrets:/secrets:ro
+      - /tmp/conductor-workspaces:/workspaces
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - app
+
+volumes:
+  postgres-data:
+  redis-data:

@@ -1,0 +1,36 @@
+{
+  "name": "@conductor/integrations",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./telegram": {
+      "types": "./dist/telegram/index.d.ts",
+      "import": "./dist/telegram/index.js"
+    },
+    "./grafana": {
+      "types": "./dist/grafana/index.d.ts",
+      "import": "./dist/grafana/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@conductor/core": "workspace:*",
+    "telegraf": "^4.15.0"
+  },
+  "devDependencies": {
+    "vitest": "^1.1.0"
+  }
+}

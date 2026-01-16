@@ -1,0 +1,79 @@
+# Dockerfile for Conductor Worker
+FROM node:20-alpine AS base
+
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+# Install git and other tools needed for agent operations
+RUN apk add --no-cache git openssh-client
+
+WORKDIR /app
+
+# Install dependencies
+FROM base AS deps
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/core/package.json ./packages/core/
+COPY packages/worker/package.json ./packages/worker/
+COPY packages/agents/package.json ./packages/agents/
+COPY packages/orchestrator/package.json ./packages/orchestrator/
+
+RUN pnpm install --frozen-lockfile
+
+# Build
+FROM base AS builder
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/core/node_modules ./packages/core/node_modules
+COPY --from=deps /app/packages/worker/node_modules ./packages/worker/node_modules
+COPY --from=deps /app/packages/agents/node_modules ./packages/agents/node_modules
+COPY --from=deps /app/packages/orchestrator/node_modules ./packages/orchestrator/node_modules
+
+COPY . .
+
+RUN pnpm --filter @conductor/core build && \
+    pnpm --filter @conductor/agents build && \
+    pnpm --filter @conductor/orchestrator build && \
+    pnpm --filter @conductor/worker build
+
+# Production
+FROM node:20-alpine AS runner
+
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+# Install runtime dependencies
+RUN apk add --no-cache git openssh-client
+
+# Install Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1001 conductor && \
+    adduser --system --uid 1001 conductor
+
+# Create workspaces directory
+RUN mkdir -p /workspaces && chown conductor:conductor /workspaces
+
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/pnpm-lock.yaml ./
+COPY --from=builder /app/pnpm-workspace.yaml ./
+
+COPY --from=builder /app/packages/core/package.json ./packages/core/
+COPY --from=builder /app/packages/core/dist ./packages/core/dist
+
+COPY --from=builder /app/packages/agents/package.json ./packages/agents/
+COPY --from=builder /app/packages/agents/dist ./packages/agents/dist
+
+COPY --from=builder /app/packages/orchestrator/package.json ./packages/orchestrator/
+COPY --from=builder /app/packages/orchestrator/dist ./packages/orchestrator/dist
+
+COPY --from=builder /app/packages/worker/package.json ./packages/worker/
+COPY --from=builder /app/packages/worker/dist ./packages/worker/dist
+
+RUN pnpm install --prod --frozen-lockfile
+
+USER conductor
+
+CMD ["node", "packages/worker/dist/index.js"]

@@ -1,0 +1,118 @@
+version: '3.8'
+
+name: conductor
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: conductor-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-conductor}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB:-conductor}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    secrets:
+      - postgres_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-conductor}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - conductor-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: conductor-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - conductor-network
+
+  webhook-server:
+    image: conductor/webhook-server:${VERSION:-latest}
+    container_name: conductor-webhook-server
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-conductor}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-conductor}
+      - REDIS_URL=redis://redis:6379
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_PRIVATE_KEY_PATH=/run/secrets/github_private_key
+      - GITHUB_WEBHOOK_SECRET_FILE=/run/secrets/github_webhook_secret
+      - ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_api_key
+      - PORT=3000
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    ports:
+      - "${PORT:-3000}:3000"
+    secrets:
+      - github_private_key
+      - github_webhook_secret
+      - anthropic_api_key
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - conductor-network
+
+  worker:
+    image: conductor/worker:${VERSION:-latest}
+    container_name: conductor-worker
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-conductor}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-conductor}
+      - REDIS_URL=redis://redis:6379
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_PRIVATE_KEY_PATH=/run/secrets/github_private_key
+      - ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_api_key
+      - MAX_CONCURRENT_AGENTS=${MAX_CONCURRENT_AGENTS:-5}
+      - AGENT_TIMEOUT_MINUTES=${AGENT_TIMEOUT_MINUTES:-30}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    secrets:
+      - github_private_key
+      - anthropic_api_key
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - workspaces:/workspaces
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - conductor-network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+secrets:
+  postgres_password:
+    file: ../../secrets/postgres_password.txt
+  github_private_key:
+    file: ../../secrets/github-app.pem
+  github_webhook_secret:
+    file: ../../secrets/github_webhook_secret.txt
+  anthropic_api_key:
+    file: ../../secrets/anthropic_api_key.txt
+
+volumes:
+  postgres-data:
+  redis-data:
+  workspaces:
+
+networks:
+  conductor-network:
+    driver: bridge

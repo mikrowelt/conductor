@@ -1,0 +1,75 @@
+# Conductor Configuration Example
+# Copy this file to .conductor.yml in your repository and customize as needed
+
+version: "1.0"
+
+project:
+  name: "my-app"
+  description: "My application with Conductor automation"
+
+# Subproject detection for monorepos
+subprojects:
+  auto_detect:
+    enabled: true
+    patterns:
+      - "packages/*"
+      - "apps/*"
+      - "services/*"
+  # Explicit subproject definitions (optional, overrides auto-detect)
+  # explicit:
+  #   - path: "packages/api"
+  #     name: "API Service"
+  #     language: "typescript"
+  #     testCommand: "pnpm test"
+  #     buildCommand: "pnpm build"
+
+# Agent configuration
+agents:
+  master:
+    model: "claude-sonnet-4-20250514"
+    maxTurns: 30
+  sub_agent:
+    model: "claude-sonnet-4-20250514"
+    maxParallel: 5
+    timeoutMinutes: 30
+  code_review:
+    model: "claude-sonnet-4-20250514"
+    maxTurns: 10
+
+# Workflow settings
+workflow:
+  triggers:
+    startColumn: "Todo"
+    reviewColumn: "Review"
+  branchPattern: "conductor/{task_id}/{short_description}"
+  autoMerge: false
+  requireSmokeTest: false
+  # smokeTestWebhook: "https://your-staging.com/api/smoke-test"
+
+# Notifications
+notifications:
+  telegram:
+    enabled: false
+    # botToken and chatId should be set via environment variables
+  slack:
+    enabled: false
+    # webhookUrl: "https://hooks.slack.com/services/..."
+  webhook:
+    enabled: false
+    # url: "https://your-service.com/conductor/webhook"
+
+# Security settings
+security:
+  # File patterns that agents cannot read or modify
+  blockedPatterns:
+    - "**/.env"
+    - "**/.env.*"
+    - "**/secrets/**"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/credentials.json"
+    - "**/.git/**"
+  # Maximum files in a single PR
+  maxFilesPerPr: 50
+  # Maximum total lines changed in a PR
+  maxLinesPerPr: 2000
