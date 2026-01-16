@@ -83,3 +83,85 @@ ssh -i ~/.ssh/id_ed25519_deploy root@38.180.136.39
 **SSH Keys Configured**:
 - `mikrowelt@gmail.com` (id_ed25519)
 - `deploy-key` (id_ed25519_deploy)
+
+**VPS Services Running**:
+- PostgreSQL (Docker): `conductor-postgres` on port 5432
+- Redis (Docker): `conductor-redis` on port 6379
+- Webhook Server: `node packages/webhook-server/dist/index.js` on port 3000 (as root)
+- Worker: `node packages/worker/dist/index.js` (as conductor user)
+
+**Service Logs**:
+- Webhook: `/var/log/conductor-webhook.log`
+- Worker: `/var/log/conductor-worker.log`
+
+**Health Check**: `curl http://38.180.136.39:3000/health`
+
+---
+
+## GitHub App Configuration
+
+**App ID**: 2671159
+**App Name**: conductorboss
+**Installation ID**: 104580643 (on mikrowelt's repos)
+**Webhook URL**: `http://38.180.136.39:3000/api/github/webhooks`
+**Webhook Secret**: `conductor-webhook-secret-123`
+
+**Test Repository**: `mikrowelt/conductor-test-repo`
+
+---
+
+## Current Test Status
+
+### Manual Trigger Tests (Completed)
+The manual trigger endpoint (`POST /api/trigger`) has been tested and works:
+- Tasks are decomposed by Master Agent
+- Sub-agents execute using Claude Code CLI
+- Code review runs
+- PRs are created automatically
+
+**Successful PRs Created**:
+- PR #3: Add min function
+- PR #4: Add sign function
+
+### GitHub Projects Integration (Pending)
+To test the full workflow as described in ORIGINAL_PROMPT.md:
+1. Create a GitHub Project board with columns: Icebox, Todo, In Progress, Human Review, Done, Redo
+2. Create issues and link them to the project
+3. Move cards to "Todo" column
+4. Verify webhooks trigger Conductor
+5. Verify full flow: Todo → In Progress → Human Review → Done
+
+---
+
+## Restart Services on VPS
+
+```bash
+# SSH to VPS
+ssh -i ~/.ssh/id_ed25519_deploy root@38.180.136.39
+
+# Restart all services
+cd /root/conductor
+docker compose -f config/docker/docker-compose.dev.yml up -d postgres redis
+
+# Start webhook server (as root)
+export $(grep -v '^#' .env | xargs)
+nohup node packages/webhook-server/dist/index.js > /var/log/conductor-webhook.log 2>&1 &
+
+# Start worker (as conductor user to avoid Claude permission issues)
+su - conductor -c "cd /home/conductor/conductor && export \$(grep -v '^#' .env | xargs) && nohup node packages/worker/dist/index.js > /var/log/conductor-worker.log 2>&1 &"
+```
+
+---
+
+## Trigger Manual Task
+
+```bash
+curl -X POST http://38.180.136.39:3000/api/trigger \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repositoryFullName": "mikrowelt/conductor-test-repo",
+    "installationId": 104580643,
+    "title": "Your task title",
+    "description": "Task description"
+  }'
+```
