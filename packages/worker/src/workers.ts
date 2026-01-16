@@ -5,7 +5,7 @@
 import { Worker } from 'bullmq';
 import {
   createLogger,
-  getRedis,
+  getRedisUrl,
   QUEUE_NAMES,
 } from '@conductor/core';
 import { taskProcessor } from './processors/task-processor.js';
@@ -17,7 +17,7 @@ const logger = createLogger('workers');
 const workers: Worker[] = [];
 
 export async function startWorkers() {
-  const connection = getRedis();
+  const connection = { url: getRedisUrl() };
 
   // Task processor - handles task decomposition, review, and PR creation
   const taskWorker = new Worker(QUEUE_NAMES.TASKS, taskProcessor, {

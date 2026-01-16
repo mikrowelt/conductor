@@ -18,9 +18,9 @@ export function conductorApp(app: Probot) {
   app.on('projects_v2_item.created', handleProjectsV2Item);
 
   // Pull request events - for tracking PR status
+  // Note: 'merged' is not a separate event; it's a property of 'closed' events
   app.on('pull_request.opened', handlePullRequest);
   app.on('pull_request.closed', handlePullRequest);
-  app.on('pull_request.merged', handlePullRequest);
   app.on('pull_request.synchronize', handlePullRequest);
 
   // Issue comment events - for manual commands

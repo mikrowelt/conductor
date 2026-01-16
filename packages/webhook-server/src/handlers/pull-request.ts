@@ -13,7 +13,6 @@ const logger = createLogger('handler:pull-request');
 type PREvent =
   | 'pull_request.opened'
   | 'pull_request.closed'
-  | 'pull_request.merged'
   | 'pull_request.synchronize';
 
 export async function handlePullRequest(context: Context<PREvent>) {

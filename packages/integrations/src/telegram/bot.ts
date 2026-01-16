@@ -4,7 +4,7 @@
  * Interactive Telegram bot for Conductor notifications and commands.
  */
 
-import { Telegraf, Context } from 'telegraf';
+import { Telegraf } from 'telegraf';
 import { eq } from 'drizzle-orm';
 import { createLogger, getDb, tasks, subtasks } from '@conductor/core';
 

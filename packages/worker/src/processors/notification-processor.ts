@@ -10,7 +10,6 @@ import {
   createLogger,
   getDb,
   notifications,
-  tasks,
   NOTIFICATION_TEMPLATES,
 } from '@conductor/core';
 import type { NotificationJob, Notification, NotificationType } from '@conductor/core';
@@ -176,7 +175,7 @@ export async function queueNotification(
 ) {
   const db = getDb();
   const { Queue } = await import('bullmq');
-  const { getRedis, QUEUE_NAMES } = await import('@conductor/core');
+  const { getRedisUrl, QUEUE_NAMES } = await import('@conductor/core');
 
   const [notification] = await db
     .insert(notifications)
@@ -189,7 +188,7 @@ export async function queueNotification(
     .returning();
 
   const queue = new Queue(QUEUE_NAMES.NOTIFICATIONS, {
-    connection: getRedis(),
+    connection: { url: getRedisUrl() },
   });
 
   await queue.add(

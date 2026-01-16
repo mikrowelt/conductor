@@ -2,12 +2,13 @@
  * Health check endpoint
  */
 
-import { Router } from 'express';
+import { Router, type Router as RouterType } from 'express';
+import { sql } from 'drizzle-orm';
 import { getDb, getRedis, createLogger } from '@conductor/core';
 
 const logger = createLogger('health');
 
-export const healthRouter = Router();
+export const healthRouter: RouterType = Router();
 
 healthRouter.get('/', async (_req, res) => {
   const health = {
@@ -22,7 +23,7 @@ healthRouter.get('/', async (_req, res) => {
   try {
     // Check database
     const db = getDb();
-    await db.execute('SELECT 1');
+    await db.execute(sql`SELECT 1`);
     health.checks.database = true;
   } catch (err) {
     logger.error({ err }, 'Database health check failed');
@@ -47,7 +48,7 @@ healthRouter.get('/ready', async (_req, res) => {
   // Readiness check - are we ready to receive traffic?
   try {
     const db = getDb();
-    await db.execute('SELECT 1');
+    await db.execute(sql`SELECT 1`);
     const redis = getRedis();
     await redis.ping();
     res.status(200).json({ ready: true });

@@ -4,13 +4,22 @@
  * Processes jobs from BullMQ queues using Claude Code agents.
  */
 
+import { config } from 'dotenv';
+import { resolve } from 'path';
+
+// Load .env from project root (2 levels up from dist/index.js)
+config({ path: resolve(process.cwd(), '.env') });
+
 import { createLogger, initDb, initRedis } from '@conductor/core';
 import { startWorkers, stopWorkers } from './workers.js';
 
 const logger = createLogger('worker');
 
 async function main() {
-  logger.info('Starting Conductor Worker');
+  logger.info({
+    anthropicKeySet: !!process.env.ANTHROPIC_API_KEY,
+    cwd: process.cwd(),
+  }, 'Starting Conductor Worker');
 
   // Initialize database
   await initDb();

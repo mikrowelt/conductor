@@ -4,6 +4,8 @@
  * Reviews all changes before PR creation using the Anthropic API.
  */
 
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 import type { Octokit } from '@octokit/rest';
 import Anthropic from '@anthropic-ai/sdk';
 import { eq } from 'drizzle-orm';
@@ -16,7 +18,7 @@ import {
   parseRepoFullName,
   CODE_REVIEW_SETTINGS,
 } from '@conductor/core';
-import type { Task, CodeReview, CodeReviewIssue, CodeReviewResult } from '@conductor/core';
+import type { Task, CodeReviewIssue, CodeReviewResult } from '@conductor/core';
 import { CODE_REVIEW_PROMPT } from './prompts/code-review.js';
 
 const logger = createLogger('code-review-agent');
@@ -24,6 +26,7 @@ const logger = createLogger('code-review-agent');
 export interface CodeReviewAgentOptions {
   task: Task;
   octokit: Octokit;
+  workspacePath?: string; // Path to local workspace for reading files
   onProgress?: (message: string) => void;
 }
 
@@ -38,11 +41,13 @@ export class CodeReviewAgent {
   private anthropic: Anthropic;
   private task: Task;
   private octokit: Octokit;
+  private workspacePath?: string;
   private onProgress?: (message: string) => void;
 
   constructor(options: CodeReviewAgentOptions) {
     this.task = options.task;
     this.octokit = options.octokit;
+    this.workspacePath = options.workspacePath;
     this.onProgress = options.onProgress;
     this.anthropic = new Anthropic();
   }
@@ -99,11 +104,11 @@ export class CodeReviewAgent {
 
       this.onProgress?.(`Reviewing ${uniqueFiles.length} modified files`);
 
-      // Get the diff for each modified file
-      const diffs = await this.getFileDiffs(owner, repo, uniqueFiles);
+      // Get file content (diffs from GitHub or local files as fallback)
+      const fileContent = await this.getFileContent(owner, repo, uniqueFiles);
 
       // Perform the review
-      const reviewResult = await this.performReview(diffs, taskSubtasks);
+      const reviewResult = await this.performReview(fileContent, taskSubtasks);
 
       // Update agent run
       await db
@@ -151,47 +156,69 @@ export class CodeReviewAgent {
     }
   }
 
-  private async getFileDiffs(
+  private async getFileContent(
     owner: string,
     repo: string,
     files: string[]
   ): Promise<Map<string, string>> {
-    const diffs = new Map<string, string>();
+    const content = new Map<string, string>();
 
-    if (!this.task.branchName) {
-      return diffs;
+    // First try to get diffs from GitHub if we have a branch
+    if (this.task.branchName) {
+      try {
+        const { data: repoData } = await this.octokit.repos.get({ owner, repo });
+        const baseBranch = repoData.default_branch;
+
+        const { data: comparison } = await this.octokit.repos.compareCommits({
+          owner,
+          repo,
+          base: baseBranch,
+          head: this.task.branchName,
+        });
+
+        for (const file of comparison.files || []) {
+          if (files.includes(file.filename) && file.patch) {
+            content.set(file.filename, `[DIFF]\n${file.patch}`);
+          }
+        }
+
+        if (content.size > 0) {
+          logger.info({ fileCount: content.size }, 'Got diffs from GitHub');
+          return content;
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Failed to get file diffs from GitHub');
+      }
     }
 
-    try {
-      // Get the comparison between base branch and our branch
-      const { data: repoData } = await this.octokit.repos.get({ owner, repo });
-      const baseBranch = repoData.default_branch;
-
-      const { data: comparison } = await this.octokit.repos.compareCommits({
-        owner,
-        repo,
-        base: baseBranch,
-        head: this.task.branchName,
-      });
-
-      for (const file of comparison.files || []) {
-        if (files.includes(file.filename) && file.patch) {
-          diffs.set(file.filename, file.patch);
+    // Fall back to reading local files from workspace
+    if (this.workspacePath) {
+      logger.info({ workspacePath: this.workspacePath, files }, 'Reading local files for review');
+      for (const file of files) {
+        try {
+          const filePath = join(this.workspacePath, file);
+          const fileContent = await readFile(filePath, 'utf-8');
+          content.set(file, `[FILE CONTENT]\n${fileContent}`);
+        } catch (err) {
+          logger.warn({ file, err }, 'Failed to read local file');
         }
       }
-    } catch (err) {
-      logger.warn({ err }, 'Failed to get file diffs');
     }
 
-    return diffs;
+    return content;
   }
 
   private async performReview(
-    diffs: Map<string, string>,
+    fileContent: Map<string, string>,
     taskSubtasks: Array<{ title: string; description: string; subprojectPath: string }>
   ): Promise<Omit<ReviewOutput, 'iteration'>> {
-    const diffContent = Array.from(diffs.entries())
-      .map(([file, diff]) => `### ${file}\n\`\`\`diff\n${diff}\n\`\`\``)
+    const codeContent = Array.from(fileContent.entries())
+      .map(([file, content]) => {
+        const isDiff = content.startsWith('[DIFF]');
+        const codeBlock = isDiff ? 'diff' : 'typescript';
+        const cleanContent = content.replace(/^\[(DIFF|FILE CONTENT)\]\n/, '');
+        return `### ${file}\n\`\`\`${codeBlock}\n${cleanContent}\n\`\`\``;
+      })
       .join('\n\n');
 
     const subtaskContext = taskSubtasks
@@ -208,8 +235,8 @@ export class CodeReviewAgent {
 ## Subtasks Completed
 ${subtaskContext}
 
-## Changes to Review
-${diffContent || 'No diffs available - review based on subtask completion.'}
+## Code to Review
+${codeContent || 'No code changes available.'}
 
 ## Your Task
 

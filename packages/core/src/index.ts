@@ -13,7 +13,7 @@ export { getDb, initDb, closeDb, schema } from './db/index.js';
 export * from './db/schema.js';
 
 // Redis
-export { getRedis, initRedis, closeRedis, createRedisConnection } from './redis/index.js';
+export { getRedis, initRedis, closeRedis, createRedisConnection, getRedisUrl } from './redis/index.js';
 
 // Config
 export { loadConfig, parseConfig, validateConfig, conductorConfigSchema } from './config/index.js';

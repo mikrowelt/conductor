@@ -48,6 +48,9 @@ export class ClaudeRunner {
         workDir: this.options.workDir,
         model: this.options.model,
         maxTurns: this.options.maxTurns,
+        args: args.slice(0, -1), // Log args without the prompt for brevity
+        promptLength: this.options.prompt.length,
+        hasApiKey: !!process.env.ANTHROPIC_API_KEY,
       },
       'Starting Claude Code'
     );
@@ -72,6 +75,7 @@ export class ClaudeRunner {
       this.process.stdout?.on('data', (data: Buffer) => {
         const chunk = data.toString();
         stdout += chunk;
+        logger.info({ chunkLength: chunk.length, preview: chunk.slice(0, 200) }, 'Claude Code stdout chunk');
 
         // Try to parse JSON output for token counts
         this.parseJsonOutput(chunk, {
@@ -114,6 +118,14 @@ export class ClaudeRunner {
         const model = this.options.model || 'claude-sonnet-4-20250514';
         const totalCost = calculateTokenCost(model, inputTokens, outputTokens);
 
+        // Log raw output lengths for debugging
+        logger.info({
+          stdoutLength: stdout.length,
+          stderrLength: stderr.length,
+          stdoutPreview: stdout.slice(0, 500),
+          stderrPreview: stderr.slice(0, 500),
+        }, 'Claude Code raw output');
+
         logger.info(
           {
             exitCode: code,
@@ -144,8 +156,7 @@ export class ClaudeRunner {
         reject(err);
       });
 
-      // Send prompt to stdin
-      this.process.stdin?.write(this.options.prompt);
+      // Close stdin (prompt is passed as argument)
       this.process.stdin?.end();
     });
   }
@@ -165,7 +176,7 @@ export class ClaudeRunner {
   }
 
   private buildArgs(): string[] {
-    const args = [...CLAUDE_CODE_SETTINGS.defaultFlags];
+    const args: string[] = [...CLAUDE_CODE_SETTINGS.defaultFlags];
 
     if (this.options.model) {
       args.push('--model', this.options.model);
@@ -187,8 +198,11 @@ export class ClaudeRunner {
       args.push('--disallowedTools', this.options.disallowedTools.join(','));
     }
 
-    // Read prompt from stdin
-    args.push('-p', '-');
+    // Print mode for non-interactive output
+    args.push('-p');
+
+    // Add the prompt as the final argument
+    args.push(this.options.prompt);
 
     return args;
   }
@@ -208,7 +222,17 @@ export class ClaudeRunner {
       try {
         const json = JSON.parse(line);
 
-        // Handle token usage updates
+        // Handle final result (--output-format json)
+        if (json.type === 'result' && json.usage) {
+          const inputTokens = (json.usage.input_tokens || 0) +
+            (json.usage.cache_creation_input_tokens || 0) +
+            (json.usage.cache_read_input_tokens || 0);
+          const outputTokens = json.usage.output_tokens || 0;
+          callbacks.onTokens(inputTokens, outputTokens);
+          logger.debug({ inputTokens, outputTokens, cost: json.total_cost_usd }, 'Claude Code result');
+        }
+
+        // Handle streaming token usage updates (--output-format stream-json)
         if (json.type === 'usage') {
           callbacks.onTokens(
             json.input_tokens || 0,
@@ -216,13 +240,20 @@ export class ClaudeRunner {
           );
         }
 
-        // Handle file modification events
+        // Handle file modification events from streaming output
         if (json.type === 'tool_use' && json.tool === 'write' && json.file) {
           callbacks.onFileModified(json.file);
         }
 
         if (json.type === 'tool_use' && json.tool === 'edit' && json.file) {
           callbacks.onFileModified(json.file);
+        }
+
+        // Handle tool result for file modifications (stream-json format)
+        if (json.type === 'tool_result' && json.tool) {
+          if ((json.tool === 'Write' || json.tool === 'Edit') && json.file_path) {
+            callbacks.onFileModified(json.file_path);
+          }
         }
 
         // Handle progress messages

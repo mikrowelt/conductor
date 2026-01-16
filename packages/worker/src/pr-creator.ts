@@ -14,12 +14,14 @@ import {
   parseRepoFullName,
 } from '@conductor/core';
 import type { Task } from '@conductor/core';
+import { commitAndPush } from './workspace.js';
 
 const logger = createLogger('pr-creator');
 
 interface CreatePROptions {
   task: Task;
   octokit: Octokit;
+  workspacePath?: string;
 }
 
 interface CreatedPR {
@@ -51,6 +53,26 @@ export async function createPullRequest(
 
   if (!task.branchName) {
     throw new Error('Task has no branch name');
+  }
+
+  // Push changes to GitHub if we have a workspace path
+  if (options.workspacePath) {
+    const workspace = {
+      path: options.workspacePath,
+      branchName: task.branchName,
+      baseBranch,
+    };
+
+    const sha = await commitAndPush(
+      workspace,
+      `[Conductor] ${task.title}\n\nCompleted by Conductor automation.\nTask ID: ${task.id}`
+    );
+
+    if (sha) {
+      logger.info({ taskId: task.id, sha }, 'Changes pushed to GitHub');
+    } else {
+      logger.info({ taskId: task.id }, 'No new changes to push');
+    }
   }
 
   logger.info(

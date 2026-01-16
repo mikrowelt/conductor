@@ -5,7 +5,7 @@
  */
 
 import { createLogger, getDb, tasks, subtasks, agentRuns } from '@conductor/core';
-import { count, sum, avg, eq } from 'drizzle-orm';
+import { count, sum, eq } from 'drizzle-orm';
 
 const logger = createLogger('metrics-exporter');
 
@@ -31,7 +31,6 @@ export class MetricsExporter {
    */
   async collectMetrics(): Promise<Metric[]> {
     const metrics: Metric[] = [];
-    const db = getDb();
 
     try {
       // Task counts by status

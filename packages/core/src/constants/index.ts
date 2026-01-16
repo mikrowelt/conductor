@@ -14,19 +14,19 @@ export const TASK_STATUS_TRANSITIONS: Record<string, string[]> = {
 };
 
 export const SUBTASK_STATUS_TRANSITIONS: Record<string, string[]> = {
-  pending: ['queued', 'failed'],
+  pending: ['queued', 'running', 'failed'],
   queued: ['running', 'failed'],
-  running: ['completed', 'failed'],
+  running: ['running', 'completed', 'failed'], // Allow running -> running for idempotent updates
   completed: [],
   failed: ['pending'], // Allow retry
 };
 
-// Queue names
+// Queue names (BullMQ doesn't allow : in queue names)
 export const QUEUE_NAMES = {
-  TASKS: 'conductor:tasks',
-  SUBTASKS: 'conductor:subtasks',
-  NOTIFICATIONS: 'conductor:notifications',
-  CODE_REVIEW: 'conductor:code-review',
+  TASKS: 'conductor-tasks',
+  SUBTASKS: 'conductor-subtasks',
+  NOTIFICATIONS: 'conductor-notifications',
+  CODE_REVIEW: 'conductor-code-review',
 } as const;
 
 // Job types
@@ -84,7 +84,8 @@ export const DEFAULT_CONFIG = {
 // Claude Code CLI settings
 export const CLAUDE_CODE_SETTINGS = {
   binary: 'claude',
-  defaultFlags: ['--print', '--output-format', 'json'],
+  // --dangerously-skip-permissions bypasses permission prompts for automated execution
+  defaultFlags: ['--print', '--output-format', 'json', '--dangerously-skip-permissions'],
   maxOutputSize: 1024 * 1024, // 1MB
   defaultTimeout: 30 * 60 * 1000, // 30 minutes
 } as const;

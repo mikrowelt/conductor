@@ -75,6 +75,15 @@ export async function subtaskProcessor(job: Job<SubtaskJob>) {
       octokit,
     });
 
+    // Store branch name on task if not already set
+    if (!task.branchName && workspace.branchName) {
+      await db
+        .update(tasks)
+        .set({ branchName: workspace.branchName })
+        .where(eq(tasks.id, taskId));
+      logger.info({ taskId, branchName: workspace.branchName }, 'Updated task with branch name');
+    }
+
     // Update agent run status
     await db
       .update(agentRuns)

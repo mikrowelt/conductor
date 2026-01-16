@@ -2,8 +2,8 @@
  * Express server with Probot integration
  */
 
-import express from 'express';
-import { createProbot } from 'probot';
+import express, { type Express } from 'express';
+import { Probot, createNodeMiddleware } from 'probot';
 import { readFileSync } from 'fs';
 import { createLogger, GITHUB_APP_SETTINGS } from '@conductor/core';
 import { conductorApp } from './app.js';
@@ -12,7 +12,7 @@ import { triggerRouter } from './routes/trigger.js';
 
 const logger = createLogger('server');
 
-export async function createServer() {
+export async function createServer(): Promise<Express> {
   const app = express();
 
   // Parse JSON bodies
@@ -46,19 +46,17 @@ export async function createServer() {
     throw new Error('GITHUB_WEBHOOK_SECRET environment variable is required');
   }
 
-  const probot = createProbot({
-    overrides: {
-      appId,
-      privateKey,
-      secret: webhookSecret,
-    },
+  const probot = new Probot({
+    appId,
+    privateKey,
+    secret: webhookSecret,
   });
 
   // Load our Probot app
   await probot.load(conductorApp);
 
-  // Mount Probot's webhook handler
-  app.use(GITHUB_APP_SETTINGS.webhookPath, probot.webhooks.middleware);
+  // Mount Probot's webhook handler using createNodeMiddleware
+  app.use(GITHUB_APP_SETTINGS.webhookPath, createNodeMiddleware(conductorApp, { probot }));
 
   // Error handler
   app.use(

@@ -2,7 +2,7 @@
  * Redis connection for BullMQ queues
  */
 
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { createLogger } from '../logger/index.js';
 
 const logger = createLogger('redis');
@@ -24,14 +24,14 @@ export async function initRedis(url?: string): Promise<Redis> {
   redisClient = new Redis(redisUrl, {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
-    retryStrategy(times) {
+    retryStrategy(times: number) {
       const delay = Math.min(times * 50, 2000);
       logger.warn({ times, delay }, 'Redis connection retry');
       return delay;
     },
   });
 
-  redisClient.on('error', (err) => {
+  redisClient.on('error', (err: Error) => {
     logger.error({ err }, 'Redis connection error');
   });
 
@@ -64,4 +64,8 @@ export function createRedisConnection(url?: string): Redis {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
   });
+}
+
+export function getRedisUrl(): string {
+  return process.env.REDIS_URL || 'redis://localhost:6379';
 }

@@ -5,13 +5,14 @@
  * Useful for testing and debugging.
  */
 
-import { Router } from 'express';
+import { Router, type Router as RouterType } from 'express';
 import { Queue } from 'bullmq';
 import { z } from 'zod';
+import { eq } from 'drizzle-orm';
 import {
   createLogger,
   getDb,
-  getRedis,
+  getRedisUrl,
   tasks,
   QUEUE_NAMES,
   JOB_TYPES,
@@ -20,7 +21,7 @@ import type { TaskJob } from '@conductor/core';
 
 const logger = createLogger('trigger');
 
-export const triggerRouter = Router();
+export const triggerRouter: RouterType = Router();
 
 const triggerSchema = z.object({
   repositoryFullName: z.string().regex(/^[\w-]+\/[\w-]+$/),
@@ -54,7 +55,7 @@ triggerRouter.post('/', async (req, res) => {
 
     // Queue for processing
     const queue = new Queue<TaskJob>(QUEUE_NAMES.TASKS, {
-      connection: getRedis(),
+      connection: { url: getRedisUrl() },
     });
 
     await queue.add(
@@ -80,16 +81,16 @@ triggerRouter.post('/', async (req, res) => {
       status: task.status,
       message: 'Task created and queued for processing',
     });
-  } catch (err) {
-    if (err instanceof z.ZodError) {
+  } catch (error) {
+    if (error instanceof z.ZodError) {
       res.status(400).json({
         error: 'Invalid request body',
-        details: err.errors,
+        details: error.errors,
       });
       return;
     }
 
-    logger.error({ err }, 'Failed to create manual task');
+    logger.error({ err: error }, 'Failed to create manual task');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -100,10 +101,7 @@ triggerRouter.get('/:taskId', async (req, res) => {
     const { taskId } = req.params;
 
     const db = getDb();
-    const [task] = await db.select().from(tasks).where(
-      // Using raw SQL for UUID comparison
-      tasks.id.equals(taskId)
-    );
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId));
 
     if (!task) {
       res.status(404).json({ error: 'Task not found' });

@@ -2,7 +2,10 @@
  * Structured logging for Conductor
  */
 
-import pino from 'pino';
+// Use require for pino due to ESM/CJS interop issues
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pino = require('pino') as typeof import('pino').default;
 
 export interface LogContext {
   taskId?: string;
@@ -14,22 +17,11 @@ export interface LogContext {
 
 const baseLogger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  transport:
-    process.env.NODE_ENV === 'development'
-      ? {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            translateTime: 'HH:MM:ss',
-            ignore: 'pid,hostname',
-          },
-        }
-      : undefined,
   base: {
     service: 'conductor',
   },
   formatters: {
-    level: (label) => ({ level: label }),
+    level: (label: string) => ({ level: label }),
   },
 });
 
@@ -55,4 +47,4 @@ export function createAgentLogger(
 
 export { baseLogger as logger };
 
-export type Logger = pino.Logger;
+export type Logger = ReturnType<typeof pino>;

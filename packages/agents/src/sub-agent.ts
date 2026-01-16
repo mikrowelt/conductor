@@ -4,9 +4,13 @@
  * Executes a single subtask using Claude Code.
  */
 
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { createLogger, loadConfig } from '@conductor/core';
 import type { Task, Subtask } from '@conductor/core';
-import { ClaudeRunner, type AgentOutput } from './claude-runner.js';
+import { ClaudeRunner } from './claude-runner.js';
+
+const execAsync = promisify(exec);
 
 const logger = createLogger('sub-agent');
 
@@ -74,12 +78,17 @@ export class SubAgent {
 
     const result = await this.runner.run();
 
+    // Detect modified files using git
+    const gitModifiedFiles = await this.detectModifiedFiles(workspace.path);
+    // Combine with any files detected from Claude's output
+    const allModifiedFiles = [...new Set([...result.filesModified, ...gitModifiedFiles])];
+
     logger.info(
       {
         taskId: task.id,
         subtaskId: subtask.id,
         success: result.success,
-        filesModified: result.filesModified.length,
+        filesModified: allModifiedFiles.length,
         tokens: result.inputTokens + result.outputTokens,
         cost: result.totalCost,
       },
@@ -88,13 +97,36 @@ export class SubAgent {
 
     return {
       success: result.success,
-      filesModified: result.filesModified,
+      filesModified: allModifiedFiles,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
       totalCost: result.totalCost,
       duration: result.duration,
       output: result.output,
     };
+  }
+
+  private async detectModifiedFiles(workspacePath: string): Promise<string[]> {
+    try {
+      // Get list of modified, added, and untracked files
+      const { stdout: modified } = await execAsync(
+        'git diff --name-only && git diff --cached --name-only',
+        { cwd: workspacePath }
+      );
+      const { stdout: untracked } = await execAsync(
+        'git ls-files --others --exclude-standard',
+        { cwd: workspacePath }
+      );
+
+      const files = [...modified.split('\n'), ...untracked.split('\n')]
+        .filter((f) => f.trim().length > 0);
+
+      logger.info({ fileCount: files.length, files }, 'Git detected modified files');
+      return [...new Set(files)];
+    } catch (err) {
+      logger.warn({ err }, 'Failed to detect modified files via git');
+      return [];
+    }
   }
 
   stop(): void {

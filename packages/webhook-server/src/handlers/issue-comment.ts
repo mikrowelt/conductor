@@ -10,7 +10,7 @@ import { Queue } from 'bullmq';
 import {
   createLogger,
   getDb,
-  getRedis,
+  getRedisUrl,
   tasks,
   subtasks,
   QUEUE_NAMES,
@@ -188,7 +188,7 @@ async function handleRetryCommand(
 
   // Queue for reprocessing
   const queue = new Queue<TaskJob>(QUEUE_NAMES.TASKS, {
-    connection: getRedis(),
+    connection: { url: getRedisUrl() },
   });
 
   await queue.add(

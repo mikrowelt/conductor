@@ -4,6 +4,7 @@
  * This server receives GitHub webhooks via Probot and queues tasks for processing.
  */
 
+import 'dotenv/config';
 import { createLogger, initDb, initRedis } from '@conductor/core';
 import { createServer } from './server.js';
 
@@ -22,16 +23,16 @@ async function main() {
 
   // Create and start server
   const port = parseInt(process.env.PORT || '3000', 10);
-  const server = await createServer();
+  const app = await createServer();
 
-  server.listen(port, () => {
+  const httpServer = app.listen(port, () => {
     logger.info({ port }, 'Webhook server listening');
   });
 
   // Graceful shutdown
   const shutdown = async () => {
     logger.info('Shutting down...');
-    server.close();
+    httpServer.close();
     process.exit(0);
   };
 

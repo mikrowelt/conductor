@@ -24,7 +24,7 @@ export class AgentPool {
   private limiter: ReturnType<typeof pLimit>;
   private running = false;
 
-  constructor(private maxConcurrency: number = 5) {
+  constructor(maxConcurrency: number = 5) {
     this.limiter = pLimit(maxConcurrency);
     logger.info({ maxConcurrency }, 'Agent pool created');
   }

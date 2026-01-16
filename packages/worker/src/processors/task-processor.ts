@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm';
 import {
   createLogger,
   getDb,
-  getRedis,
+  getRedisUrl,
   tasks,
   QUEUE_NAMES,
   JOB_TYPES,
@@ -98,7 +98,7 @@ async function handleDecompose(task: Task, job: Job<TaskJob>) {
 
   // Queue subtasks for execution
   const subtaskQueue = new Queue<SubtaskJob>(QUEUE_NAMES.SUBTASKS, {
-    connection: getRedis(),
+    connection: { url: getRedisUrl() },
   });
 
   for (const subtask of decomposition.subtasks) {
@@ -124,7 +124,7 @@ async function handleDecompose(task: Task, job: Job<TaskJob>) {
 
   // Schedule a check for when subtasks are complete
   const taskQueue = new Queue<TaskJob>(QUEUE_NAMES.TASKS, {
-    connection: getRedis(),
+    connection: { url: getRedisUrl() },
   });
 
   await taskQueue.add(
@@ -149,7 +149,7 @@ async function handleExecute(task: Task, job: Job<TaskJob>) {
   if (!allComplete) {
     // Re-queue this check for later
     const taskQueue = new Queue<TaskJob>(QUEUE_NAMES.TASKS, {
-      connection: getRedis(),
+      connection: { url: getRedisUrl() },
     });
 
     await taskQueue.add(
@@ -172,7 +172,7 @@ async function handleExecute(task: Task, job: Job<TaskJob>) {
 
   // Queue for code review
   const taskQueue = new Queue<TaskJob>(QUEUE_NAMES.TASKS, {
-    connection: getRedis(),
+    connection: { url: getRedisUrl() },
   });
 
   await taskQueue.add(
@@ -194,9 +194,14 @@ async function handleReview(task: Task, job: Job<TaskJob>) {
 
   const octokit = await createGitHubClient(task.installationId);
 
+  // Compute workspace path for reading local files
+  const workspacesDir = process.env.WORKSPACES_DIR || '/tmp/conductor-workspaces';
+  const workspacePath = `${workspacesDir}/${task.id}`;
+
   const reviewAgent = new CodeReviewAgent({
     task,
     octokit,
+    workspacePath,
     onProgress: (message) => {
       job.updateProgress({ stage: 'review', message });
     },
@@ -209,7 +214,7 @@ async function handleReview(task: Task, job: Job<TaskJob>) {
 
     // Queue PR creation
     const taskQueue = new Queue<TaskJob>(QUEUE_NAMES.TASKS, {
-      connection: getRedis(),
+      connection: { url: getRedisUrl() },
     });
 
     await taskQueue.add(
@@ -248,9 +253,14 @@ async function handleCreatePR(task: Task, _job: Job<TaskJob>) {
 
   const octokit = await createGitHubClient(task.installationId);
 
+  // Compute workspace path for pushing changes
+  const workspacesDir = process.env.WORKSPACES_DIR || '/tmp/conductor-workspaces';
+  const workspacePath = `${workspacesDir}/${task.id}`;
+
   const pr = await createPullRequest({
     task,
     octokit,
+    workspacePath,
   });
 
   await transitionTaskStatus(task.id, 'pr_created', {

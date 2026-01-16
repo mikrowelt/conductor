@@ -162,7 +162,7 @@ export class SmokeTestTrigger {
         throw new Error(`Smoke test trigger failed: ${response.status}`);
       }
 
-      const result = await response.json();
+      const result = (await response.json()) as { poll_url?: string };
 
       return {
         triggered: true,
@@ -185,7 +185,10 @@ export class SmokeTestTrigger {
         throw new Error(`Poll failed: ${response.status}`);
       }
 
-      return response.json();
+      return (await response.json()) as {
+        status: 'pending' | 'running' | 'passed' | 'failed';
+        details?: string;
+      };
     } catch (err) {
       logger.error({ err, pollUrl }, 'Failed to poll smoke test status');
       return { status: 'pending' };

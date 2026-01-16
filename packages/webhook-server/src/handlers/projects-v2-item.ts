@@ -10,12 +10,12 @@ import { Queue } from 'bullmq';
 import {
   createLogger,
   getDb,
-  getRedis,
+  getRedisUrl,
   tasks,
   QUEUE_NAMES,
   JOB_TYPES,
 } from '@conductor/core';
-import type { TaskJob, GitHubProjectItem } from '@conductor/core';
+import type { TaskJob } from '@conductor/core';
 
 const logger = createLogger('handler:projects-v2-item');
 
@@ -99,7 +99,7 @@ export async function handleProjectsV2Item(
 
   // Queue task for decomposition
   const queue = new Queue<TaskJob>(QUEUE_NAMES.TASKS, {
-    connection: getRedis(),
+    connection: { url: getRedisUrl() },
   });
 
   await queue.add(
@@ -259,7 +259,7 @@ interface RepoInfo {
 }
 
 async function getLinkedRepository(
-  context: Context<'projects_v2_item.edited' | 'projects_v2_item.created'>,
+  _context: Context<'projects_v2_item.edited' | 'projects_v2_item.created'>,
   itemDetails: ProjectItemDetails
 ): Promise<RepoInfo | null> {
   // If the item has a linked issue/PR, use its repository

@@ -10,10 +10,9 @@ import {
   createLogger,
   getDb,
   subtasks,
-  loadConfig,
   parseRepoFullName,
 } from '@conductor/core';
-import type { Task, TaskDecomposition, SubtaskDefinition, Subtask } from '@conductor/core';
+import type { Task, TaskDecomposition, Subtask } from '@conductor/core';
 import { SubprojectDetector } from './subproject-detector.js';
 import { MASTER_PROMPT } from './prompts/master.js';
 
