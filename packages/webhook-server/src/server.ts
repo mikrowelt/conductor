@@ -15,14 +15,11 @@ const logger = createLogger('server');
 export async function createServer(): Promise<Express> {
   const app = express();
 
-  // Parse JSON bodies
-  app.use(express.json());
-
-  // Health check endpoint
+  // Health check endpoint (no body parsing needed)
   app.use(GITHUB_APP_SETTINGS.healthPath, healthRouter);
 
-  // Manual trigger endpoint
-  app.use(GITHUB_APP_SETTINGS.manualTriggerPath, triggerRouter);
+  // Manual trigger endpoint (needs JSON parsing)
+  app.use(GITHUB_APP_SETTINGS.manualTriggerPath, express.json(), triggerRouter);
 
   // Create Probot instance
   const privateKeyPath = process.env.GITHUB_PRIVATE_KEY_PATH;
