@@ -120,16 +120,25 @@ The manual trigger endpoint (`POST /api/trigger`) has been tested and works:
 - PRs are created automatically
 
 **Successful PRs Created**:
+- PR #2: Add max function
 - PR #3: Add min function
 - PR #4: Add sign function
+- PR #5: Add average function
 
 ### GitHub Projects Integration (NEEDS YOUR ACTION)
 
-**Step 1: Add project scope to GitHub CLI** (run in terminal):
-```bash
-gh auth refresh -h github.com -s project,read:project
-```
-This will open a browser - authorize the additional scopes.
+The GitHub App and CLI need additional project permissions to work with GitHub Projects boards.
+
+**Current App Permissions**:
+- `contents: write` ✓
+- `issues: write` ✓
+- `pull_requests: write` ✓
+- `organization_projects: write` ✓
+- `projects (user-level): ❌ MISSING`
+
+**Step 1: Authorize gh CLI for project scope**:
+Open: https://github.com/login/device
+Enter code when prompted by `gh auth refresh -h github.com -s project,read:project`
 
 **Step 2: Update GitHub App permissions**:
 Go to: https://github.com/settings/apps/conductorboss/permissions

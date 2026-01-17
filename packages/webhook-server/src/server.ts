@@ -56,7 +56,9 @@ export async function createServer(): Promise<Express> {
   await probot.load(conductorApp);
 
   // Mount Probot's webhook handler using createNodeMiddleware
-  app.use(GITHUB_APP_SETTINGS.webhookPath, createNodeMiddleware(conductorApp, { probot }));
+  // Note: createNodeMiddleware defaults to /api/github/webhooks, so we mount at root
+  // and let it handle its own path
+  app.use(createNodeMiddleware(conductorApp, { probot }));
 
   // Error handler
   app.use(

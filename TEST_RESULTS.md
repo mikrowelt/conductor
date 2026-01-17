@@ -19,12 +19,12 @@ Conductor has been successfully deployed and tested. The system can:
 
 ## Successful PRs Created
 
-| PR # | Title | Status | URL |
-|------|-------|--------|-----|
-| #2 | Add max function | Open | [Link](https://github.com/mikrowelt/conductor-test-repo/pull/2) |
-| #3 | Add min function | Open | [Link](https://github.com/mikrowelt/conductor-test-repo/pull/3) |
-| #4 | Add sign function | Open | [Link](https://github.com/mikrowelt/conductor-test-repo/pull/4) |
-| #5 | Add average function | Open | [Link](https://github.com/mikrowelt/conductor-test-repo/pull/5) |
+| PR # | Title | Status | Created | URL |
+|------|-------|--------|---------|-----|
+| #2 | Add max function | Open | 2026-01-16 | [Link](https://github.com/mikrowelt/conductor-test-repo/pull/2) |
+| #3 | Add min function | Open | 2026-01-16 | [Link](https://github.com/mikrowelt/conductor-test-repo/pull/3) |
+| #4 | Add sign function | Open | 2026-01-16 | [Link](https://github.com/mikrowelt/conductor-test-repo/pull/4) |
+| #5 | Add average function | Open | 2026-01-16 | [Link](https://github.com/mikrowelt/conductor-test-repo/pull/5) |
 
 ---
 
