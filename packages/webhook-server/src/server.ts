@@ -9,6 +9,8 @@ import { createLogger, GITHUB_APP_SETTINGS } from '@conductor/core';
 import { conductorApp } from './app.js';
 import { healthRouter } from './routes/health.js';
 import { triggerRouter } from './routes/trigger.js';
+import { testNotificationRouter } from './routes/test-notification.js';
+import { metricsRouter } from './routes/metrics.js';
 
 const logger = createLogger('server');
 
@@ -20,6 +22,12 @@ export async function createServer(): Promise<Express> {
 
   // Manual trigger endpoint (needs JSON parsing)
   app.use(GITHUB_APP_SETTINGS.manualTriggerPath, express.json(), triggerRouter);
+
+  // Test notification endpoint
+  app.use('/api/test-notification', express.json(), testNotificationRouter);
+
+  // Metrics endpoint for Prometheus/Grafana
+  app.use('/metrics', metricsRouter);
 
   // Create Probot instance
   const privateKeyPath = process.env.GITHUB_PRIVATE_KEY_PATH;

@@ -6,9 +6,105 @@
 
 import type { Context } from 'probot';
 import { eq } from 'drizzle-orm';
-import { createLogger, getDb, pullRequests, tasks } from '@conductor/core';
+import { createLogger, getDb, pullRequests, tasks, PROJECT_COLUMNS } from '@conductor/core';
 
 const logger = createLogger('handler:pull-request');
+
+/**
+ * Move a project item to a different column using GraphQL
+ */
+async function moveProjectItemToDone(
+  context: Context<PREvent>,
+  projectNodeId: string,
+  itemNodeId: string
+): Promise<void> {
+  try {
+    // Get project info to find the status field and Done option
+    const projectResponse = await context.octokit.graphql<{
+      node: {
+        id: string;
+        fields: {
+          nodes: Array<{
+            id: string;
+            name: string;
+            options?: Array<{ id: string; name: string }>;
+          }>;
+        };
+      };
+    }>(
+      `
+      query($projectId: ID!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            id
+            fields(first: 20) {
+              nodes {
+                ... on ProjectV2SingleSelectField {
+                  id
+                  name
+                  options {
+                    id
+                    name
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+      { projectId: projectNodeId }
+    );
+
+    const statusField = projectResponse.node?.fields?.nodes?.find(
+      (f) => f.name === 'Status'
+    );
+
+    if (!statusField?.options) {
+      logger.warn('Status field not found in project');
+      return;
+    }
+
+    const doneOption = statusField.options.find(
+      (o) => o.name === PROJECT_COLUMNS.DONE
+    );
+
+    if (!doneOption) {
+      logger.warn({ available: statusField.options.map(o => o.name) }, 'Done column not found');
+      return;
+    }
+
+    // Move the item to Done
+    await context.octokit.graphql(
+      `
+      mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+        updateProjectV2ItemFieldValue(
+          input: {
+            projectId: $projectId
+            itemId: $itemId
+            fieldId: $fieldId
+            value: { singleSelectOptionId: $optionId }
+          }
+        ) {
+          projectV2Item {
+            id
+          }
+        }
+      }
+    `,
+      {
+        projectId: projectResponse.node.id,
+        itemId: itemNodeId,
+        fieldId: statusField.id,
+        optionId: doneOption.id,
+      }
+    );
+
+    logger.info({ itemNodeId }, 'Project item moved to Done');
+  } catch (err) {
+    logger.error({ err, projectNodeId, itemNodeId }, 'Failed to move project item to Done');
+  }
+}
 
 type PREvent =
   | 'pull_request.opened'
@@ -70,6 +166,21 @@ export async function handlePullRequest(context: Context<PREvent>) {
             updatedAt: new Date(),
           })
           .where(eq(tasks.id, prRecord.taskId));
+
+        // Get task to access project item ID for card movement
+        const [task] = await db
+          .select()
+          .from(tasks)
+          .where(eq(tasks.id, prRecord.taskId));
+
+        // Move project card to "Done" column
+        if (task && task.githubProjectId && task.githubProjectItemId) {
+          await moveProjectItemToDone(
+            context,
+            task.githubProjectId,
+            task.githubProjectItemId
+          );
+        }
 
         logger.info({ taskId: prRecord.taskId, prNumber: pr.number }, 'Task completed - PR merged');
       } else {

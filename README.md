@@ -171,6 +171,71 @@ pnpm typecheck
 pnpm lint
 ```
 
+## Operations
+
+### Service Management
+
+```bash
+# Check service status
+pnpm service:status
+
+# Restart all services
+pnpm service:restart
+
+# View logs
+pnpm service:logs
+```
+
+### Deployment
+
+```bash
+# Deploy to staging
+pnpm deploy:staging
+
+# Deploy to production (with confirmation)
+pnpm deploy:production
+```
+
+### Preview Environments
+
+```bash
+# Create a preview environment for a PR
+pnpm preview:create 123
+
+# List active preview environments
+pnpm preview:list
+
+# Destroy a preview environment
+pnpm preview:destroy 123
+```
+
+### Metrics
+
+Prometheus-compatible metrics are available at `/metrics`:
+
+```bash
+curl http://your-server:3000/metrics
+```
+
+Available metrics:
+- `conductor_tasks_total` - Tasks by status
+- `conductor_subtasks_total` - Subtasks by status
+- `conductor_tokens_total` - Total tokens used
+- `conductor_cost_total_dollars` - Total API cost
+- `conductor_agent_runs_total` - Agent runs by type
+- `conductor_task_duration_seconds_avg` - Average task duration
+
+### Notifications
+
+Test notifications via the API:
+
+```bash
+# Test Telegram notification
+curl -X POST http://your-server:3000/api/test-notification \
+  -H "Content-Type: application/json" \
+  -d '{"channel": "telegram", "botToken": "your-token", "chatId": "your-chat-id"}'
+```
+
 ## Deployment
 
 ### Docker Compose (Production)

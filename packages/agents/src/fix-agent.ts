@@ -1,22 +1,22 @@
 /**
- * Sub-Agent
+ * Fix Agent
  *
- * Executes a single subtask using Claude Code.
+ * Fixes code review issues using Claude Code.
  */
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { createLogger, loadConfig } from '@conductor/core';
-import type { Task, Subtask } from '@conductor/core';
+import type { Task, CodeReviewIssue } from '@conductor/core';
 import { ClaudeRunner } from './claude-runner.js';
 
 const execAsync = promisify(exec);
 
-const logger = createLogger('sub-agent');
+const logger = createLogger('fix-agent');
 
-export interface SubAgentOptions {
+export interface FixAgentOptions {
   task: Task;
-  subtask: Subtask;
+  issues: CodeReviewIssue[];
   workspace: {
     path: string;
     branchName: string;
@@ -26,7 +26,7 @@ export interface SubAgentOptions {
   onOutput?: (output: string) => void;
 }
 
-export interface SubAgentResult {
+export interface FixAgentResult {
   success: boolean;
   filesModified: string[];
   inputTokens: number;
@@ -36,27 +36,26 @@ export interface SubAgentResult {
   output: string;
 }
 
-export class SubAgent {
+export class FixAgent {
   private runner: ClaudeRunner | null = null;
 
-  constructor(private options: SubAgentOptions) {}
+  constructor(private options: FixAgentOptions) {}
 
-  async execute(): Promise<SubAgentResult> {
-    const { task, subtask, workspace } = this.options;
+  async execute(): Promise<FixAgentResult> {
+    const { task, issues, workspace } = this.options;
 
     logger.info(
       {
         taskId: task.id,
-        subtaskId: subtask.id,
-        subproject: subtask.subprojectPath,
+        issueCount: issues.length,
       },
-      'Sub-Agent starting execution'
+      'Fix Agent starting execution'
     );
 
     // Load repository config
     const config = await loadConfig(workspace.path);
 
-    // Build the prompt for this subtask
+    // Build the prompt for fixing issues
     const prompt = this.buildPrompt();
 
     // Determine model and settings
@@ -80,19 +79,17 @@ export class SubAgent {
 
     // Detect modified files using git
     const gitModifiedFiles = await this.detectModifiedFiles(workspace.path);
-    // Combine with any files detected from Claude's output
     const allModifiedFiles = [...new Set([...result.filesModified, ...gitModifiedFiles])];
 
     logger.info(
       {
         taskId: task.id,
-        subtaskId: subtask.id,
         success: result.success,
         filesModified: allModifiedFiles.length,
         tokens: result.inputTokens + result.outputTokens,
         cost: result.totalCost,
       },
-      'Sub-Agent completed'
+      'Fix Agent completed'
     );
 
     return {
@@ -108,7 +105,6 @@ export class SubAgent {
 
   private async detectModifiedFiles(workspacePath: string): Promise<string[]> {
     try {
-      // Get list of modified, added, and untracked files
       const { stdout: modified } = await execAsync(
         'git diff --name-only && git diff --cached --name-only',
         { cwd: workspacePath }
@@ -136,70 +132,71 @@ export class SubAgent {
   }
 
   private buildPrompt(): string {
-    const { task, subtask, workspace } = this.options;
+    const { task, issues, workspace } = this.options;
+
+    const issuesList = issues
+      .map((issue, i) => {
+        const location = issue.line ? `${issue.file}:${issue.line}` : issue.file;
+        const suggestion = issue.suggestion ? `\n   Suggestion: ${issue.suggestion}` : '';
+        return `${i + 1}. [${issue.severity.toUpperCase()}] ${location}\n   ${issue.message}${suggestion}`;
+      })
+      .join('\n\n');
 
     return `
-# Task Context
+# Code Review Fix Request
 
-You are a Sub-Agent working on part of a larger task. Your job is to implement changes for a specific subproject.
+You are fixing issues found during code review.
 
-## Main Task
+## Task Context
 **Title:** ${task.title}
 **Description:** ${task.description || 'No description provided'}
-
-## Your Subtask
-**Title:** ${subtask.title}
-**Description:** ${subtask.description}
-**Subproject Path:** ${subtask.subprojectPath}
 
 ## Branch Information
 - Working branch: ${workspace.branchName}
 - Base branch: ${workspace.baseBranch}
 
+## Issues to Fix
+
+The code review found the following issues that need to be addressed:
+
+${issuesList}
+
 ## Instructions
 
-1. Focus ONLY on the subtask assigned to you
-2. Work within the subproject path: ${subtask.subprojectPath}
-3. Make minimal, focused changes to complete the subtask
-4. Follow existing code patterns and conventions
-5. Add or update tests if appropriate
-6. Do NOT modify files outside your subproject unless absolutely necessary
-7. If you encounter issues that require changes outside your scope, document them clearly
-8. **IMPORTANT**: If you change any public APIs, interfaces, function signatures, or dependencies:
-   - Update the REQUIREMENTS.md file to reflect these changes
-   - Document new exports, changed function signatures, or modified interfaces
-   - This helps other agents understand how to interact with this module
+1. Address each issue listed above
+2. For errors: These MUST be fixed
+3. For warnings: Fix these unless there's a good reason not to
+4. For suggestions: Consider implementing these improvements
+5. Make minimal changes needed to fix the issues
+6. Follow existing code patterns and conventions
+7. Run tests if available to ensure your fixes don't break anything
 
-## Completion Criteria
+## Important
 
-Your subtask is complete when:
-- The described functionality is implemented
-- Code follows project conventions
-- No obvious bugs or issues
-- Tests pass (if applicable)
+- Focus ONLY on fixing the identified issues
+- Do NOT make other changes or improvements
+- If an issue is unclear, make a reasonable fix based on the suggestion
+- After fixing, stage your changes with git add
 
-Please begin implementing the subtask now.
+Please begin fixing the issues now.
     `.trim();
   }
 
   private buildSystemPrompt(): string {
-    const { subtask } = this.options;
-
     return `
-You are a focused Sub-Agent working on a specific part of a larger development task.
+You are a Fix Agent focused on addressing code review issues.
 
-Your scope is limited to: ${subtask.subprojectPath}
+Your task is to fix specific issues identified during code review.
 
 Guidelines:
-- Be efficient and focused
-- Make minimal changes needed to complete the task
+- Be precise and targeted in your fixes
+- Make minimal changes needed to address each issue
 - Follow existing patterns in the codebase
-- Write clean, maintainable code
-- Document complex logic with comments
+- Ensure your fixes don't introduce new issues
+- Stage your changes with git add after making them
 - Do not make unnecessary refactoring changes
-- **Update REQUIREMENTS.md when you change public interfaces** (APIs, exports, function signatures)
 
-Read REQUIREMENTS.md and CLAUDE.md files in the repository to understand project conventions and dependencies.
+Focus only on the issues provided - do not make other changes.
     `.trim();
   }
 }

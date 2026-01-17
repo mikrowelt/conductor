@@ -8,6 +8,7 @@ export type TaskStatus =
   | 'decomposing'
   | 'executing'
   | 'review'
+  | 'human_review'  // Agent has questions or needs clarification
   | 'pr_created'
   | 'done'
   | 'failed';
@@ -72,7 +73,14 @@ export interface Task {
   pullRequestNumber: number | null;
   pullRequestUrl: string | null;
   errorMessage: string | null;
+  humanReviewQuestion: string | null;  // Question for human when in human_review status
+  humanReviewAnswer: string | null;    // Answer from human (from comment)
   retryCount: number;
+  // Epic support
+  isEpic: boolean;
+  parentTaskId: string | null;  // Reference to parent epic (null for top-level tasks)
+  linkedGithubIssueNumber: number | null;  // GitHub issue number for this task
+  childDependencies: string[] | null;  // Task titles this depends on (for child tasks)
   createdAt: Date;
   updatedAt: Date;
   startedAt: Date | null;
@@ -167,7 +175,9 @@ export type NotificationType =
   | 'review_completed'
   | 'pr_created'
   | 'task_completed'
-  | 'task_failed';
+  | 'task_failed'
+  | 'human_review_needed'
+  | 'redo_requested';
 
 // Configuration types
 export interface ConductorConfig {
@@ -255,7 +265,7 @@ export interface SecurityConfig {
 // Queue job types
 export interface TaskJob {
   taskId: string;
-  action: 'decompose' | 'execute' | 'review' | 'create_pr';
+  action: 'decompose' | 'execute' | 'review' | 'fix' | 'create_pr' | 'smoke_test';
 }
 
 export interface SubtaskJob {
@@ -304,11 +314,16 @@ export interface FileConflict {
 
 // Task decomposition types
 export interface TaskDecomposition {
+  type: 'simple' | 'epic';  // Master Agent decides
   summary: string;
   affectedSubprojects: string[];
   subtasks: SubtaskDefinition[];
   dependencies: DependencyGraph;
   estimatedComplexity: 'low' | 'medium' | 'high';
+  needsHumanReview?: boolean;
+  humanReviewQuestion?: string;
+  // Epic-specific fields (only present when type === 'epic')
+  epicChildren?: ChildTaskDefinition[];
 }
 
 export interface SubtaskDefinition {
@@ -317,6 +332,14 @@ export interface SubtaskDefinition {
   description: string;
   dependsOn: string[];
   files: string[];
+}
+
+// Child task definition for epics
+export interface ChildTaskDefinition {
+  title: string;
+  description: string;
+  dependsOn: string[];  // Titles of other child tasks this depends on
+  estimatedComplexity: 'low' | 'medium' | 'high';
 }
 
 export interface DependencyGraph {

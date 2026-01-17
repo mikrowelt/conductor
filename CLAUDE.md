@@ -102,11 +102,17 @@ ssh -i ~/.ssh/id_ed25519_deploy root@38.180.136.39
 
 **App ID**: 2671159
 **App Name**: conductorboss
-**Installation ID**: 104580643 (on mikrowelt's repos)
+**Installation ID**: 104648177 (on socialjunky org)
 **Webhook URL**: `http://38.180.136.39:3000/api/github/webhooks`
 **Webhook Secret**: `conductor-webhook-secret-123`
 
-**Test Repository**: `mikrowelt/conductor-test-repo`
+**IMPORTANT**: The webhook secret MUST be `conductor-webhook-secret-123` in BOTH places:
+1. **GitHub App Settings**: https://github.com/settings/apps/conductorboss → Webhook → Secret
+2. **VPS .env file**: `GITHUB_WEBHOOK_SECRET=conductor-webhook-secret-123` in `/root/conductor/.env`
+
+If webhook signature errors occur, verify both locations have this exact secret.
+
+**Test Repository**: `socialjunky/conductor-test` (org-owned, receives webhooks)
 
 ---
 
@@ -119,34 +125,36 @@ The manual trigger endpoint (`POST /api/trigger`) has been tested and works:
 - Code review runs
 - PRs are created automatically
 
-**Successful PRs Created**:
-- PR #2: Add max function
-- PR #3: Add min function
-- PR #4: Add sign function
-- PR #5: Add average function
+**Successful PRs Created** (on socialjunky/conductor-test):
+- PR #7: Add average function (merged)
+- PR #8: Add multiply function (merged)
+
+### Card Movement Implementation
+
+**Status**: Card movements are implemented and code is deployed. The movements are triggered at:
+1. **In Progress** - When task starts decomposing (`task-processor.ts:handleDecompose`)
+2. **Human Review** - After PR is created (`task-processor.ts:handleCreatePR`)
+3. **Done** - When PR is merged (`pull-request.ts:handlePullRequest`)
+
+**Troubleshooting**: If PR merge webhooks fail with signature errors, ensure the GitHub App webhook secret is set to `conductor-webhook-secret-123` (see GitHub App Configuration section above).
 
 ### GitHub Projects Integration
 
-**Status**: Webhook signature verification is working. However, GitHub has a limitation where `projects_v2_item` webhooks are NOT sent for user-owned projects - only organization-owned projects receive these webhooks.
+**Status**: Requires organization-owned projects. User-owned projects do NOT trigger `projects_v2_item` webhooks.
 
-**Project Board Created**:
-- Project: "Conductor Test Board" (project #1)
-- Columns: Icebox, Todo, In Progress, Human Review, Done, Redo
-- URL: https://github.com/users/mikrowelt/projects/1
-
-**Current Workaround**: Use the manual trigger endpoint instead of project card movements:
+**Current Workaround**: Use the manual trigger endpoint:
 ```bash
 curl -X POST http://38.180.136.39:3000/api/trigger \
   -H "Content-Type: application/json" \
   -d '{
-    "repositoryFullName": "mikrowelt/conductor-test-repo",
-    "installationId": 104580643,
+    "repositoryFullName": "socialjunky/conductor-test",
+    "installationId": 104648177,
     "title": "Your task title",
     "description": "Task description"
   }'
 ```
 
-**For Full GitHub Projects Integration**: Create an organization and use org-owned projects. Org-owned projects DO trigger `projects_v2_item` webhooks to GitHub Apps.
+**Note**: Manual triggers use placeholder project IDs ("manual"), so card movements will log errors but won't affect functionality. Real project webhooks will work when proper project IDs are provided.
 
 ---
 
@@ -181,4 +189,38 @@ curl -X POST http://38.180.136.39:3000/api/trigger \
     "title": "Your task title",
     "description": "Task description"
   }'
+```
+
+---
+
+## Deployment Scripts
+
+```bash
+# Deploy to staging (from local machine)
+pnpm deploy:staging
+
+# Deploy to production (requires confirmation)
+pnpm deploy:production
+
+# Check service status
+pnpm service:status
+
+# Restart services
+pnpm service:restart
+
+# View logs
+pnpm service:logs
+```
+
+---
+
+## Metrics & Monitoring
+
+**Prometheus Metrics**: http://38.180.136.39:3000/metrics
+
+**Test Notifications**:
+```bash
+curl -X POST http://38.180.136.39:3000/api/test-notification \
+  -H "Content-Type: application/json" \
+  -d '{"channel": "telegram", "botToken": "TOKEN", "chatId": "CHAT_ID"}'
 ```

@@ -5,13 +5,24 @@
 // Task state machine transitions
 export const TASK_STATUS_TRANSITIONS: Record<string, string[]> = {
   pending: ['decomposing', 'failed'],
-  decomposing: ['executing', 'failed'],
-  executing: ['review', 'failed'],
-  review: ['pr_created', 'executing', 'failed'],
-  pr_created: ['done', 'failed'],
+  decomposing: ['executing', 'human_review', 'failed'],  // Can go to human_review if unclear
+  executing: ['review', 'human_review', 'failed'],       // Can go to human_review if stuck
+  review: ['pr_created', 'executing', 'human_review', 'failed'],
+  human_review: ['decomposing', 'executing', 'failed'],  // Return from human review
+  pr_created: ['done', 'human_review', 'failed'],        // Can go back for feedback
   done: [],
   failed: ['pending'], // Allow retry
 };
+
+// Project board column names
+export const PROJECT_COLUMNS = {
+  ICEBOX: 'Icebox',
+  TODO: 'Todo',
+  IN_PROGRESS: 'In Progress',
+  HUMAN_REVIEW: 'Human Review',
+  DONE: 'Done',
+  REDO: 'Redo',
+} as const;
 
 export const SUBTASK_STATUS_TRANSITIONS: Record<string, string[]> = {
   pending: ['queued', 'running', 'failed'],
@@ -34,6 +45,7 @@ export const JOB_TYPES = {
   DECOMPOSE_TASK: 'decompose-task',
   EXECUTE_SUBTASK: 'execute-subtask',
   RUN_CODE_REVIEW: 'run-code-review',
+  FIX_ISSUES: 'fix-issues',
   CREATE_PR: 'create-pr',
   SEND_NOTIFICATION: 'send-notification',
 } as const;
@@ -128,4 +140,6 @@ export const NOTIFICATION_TEMPLATES = {
   pr_created: '🔗 PR created: {url}',
   task_completed: '🎉 Task completed: {title}',
   task_failed: '❌ Task failed: {title} - {error}',
+  human_review_needed: '❓ Agent needs clarification: {title}\n\n{question}',
+  redo_requested: '🔄 Redo requested: {title}\n\nFeedback: {feedback}',
 } as const;

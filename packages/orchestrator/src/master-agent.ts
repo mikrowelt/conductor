@@ -12,7 +12,7 @@ import {
   subtasks,
   parseRepoFullName,
 } from '@conductor/core';
-import type { Task, TaskDecomposition, Subtask } from '@conductor/core';
+import type { Task, TaskDecomposition, Subtask, ChildTaskDefinition } from '@conductor/core';
 import { SubprojectDetector } from './subproject-detector.js';
 import { MASTER_PROMPT } from './prompts/master.js';
 
@@ -25,9 +25,14 @@ export interface MasterAgentOptions {
 }
 
 interface DecompositionResult {
+  type: 'simple' | 'epic';
   subtasks: Subtask[];
   affectedSubprojects: string[];
   summary: string;
+  needsHumanReview?: boolean;
+  humanReviewQuestion?: string;
+  // Epic-specific: child tasks to be created as GitHub issues
+  epicChildren?: ChildTaskDefinition[];
 }
 
 export class MasterAgent {
@@ -78,7 +83,49 @@ export class MasterAgent {
       contextFiles
     );
 
-    // Create subtask records in database
+    // Check if human review is needed
+    if (decomposition.needsHumanReview && decomposition.humanReviewQuestion) {
+      logger.info(
+        {
+          taskId: this.task.id,
+          question: decomposition.humanReviewQuestion,
+        },
+        'Master Agent requesting human review'
+      );
+
+      return {
+        type: 'simple',
+        subtasks: [],
+        affectedSubprojects: decomposition.affectedSubprojects || [],
+        summary: decomposition.summary,
+        needsHumanReview: true,
+        humanReviewQuestion: decomposition.humanReviewQuestion,
+      };
+    }
+
+    // Handle EPIC tasks differently - return child definitions for GitHub issue creation
+    const isEpic = decomposition.type === 'epic' && decomposition.epicChildren && decomposition.epicChildren.length > 0;
+
+    if (isEpic) {
+      logger.info(
+        {
+          taskId: this.task.id,
+          childCount: decomposition.epicChildren!.length,
+          affectedSubprojects: decomposition.affectedSubprojects,
+        },
+        'Task identified as EPIC - returning child task definitions'
+      );
+
+      return {
+        type: 'epic',
+        subtasks: [],
+        affectedSubprojects: decomposition.affectedSubprojects,
+        summary: decomposition.summary,
+        epicChildren: decomposition.epicChildren,
+      };
+    }
+
+    // SIMPLE task - Create subtask records in database
     const db = getDb();
     const createdSubtasks: Subtask[] = [];
 
@@ -104,10 +151,11 @@ export class MasterAgent {
         subtaskCount: createdSubtasks.length,
         affectedSubprojects: decomposition.affectedSubprojects,
       },
-      'Task decomposition complete'
+      'Simple task decomposition complete'
     );
 
     return {
+      type: 'simple',
       subtasks: createdSubtasks,
       affectedSubprojects: decomposition.affectedSubprojects,
       summary: decomposition.summary,
@@ -210,12 +258,25 @@ export class MasterAgent {
       .map(([file, content]) => `### ${file}\n\`\`\`\n${content}\n\`\`\``)
       .join('\n\n');
 
+    // Build human review context if available
+    let humanReviewContext = '';
+    if (this.task.humanReviewQuestion && this.task.humanReviewAnswer) {
+      humanReviewContext = `
+## Previous Clarification
+**Question asked:** ${this.task.humanReviewQuestion}
+**Human's answer:** ${this.task.humanReviewAnswer}
+
+Use this clarification to better understand the requirements.
+`;
+    }
+
     const prompt = `
 # Task Analysis Request
 
 ## Task Information
 **Title:** ${this.task.title}
 **Description:** ${this.task.description || 'No description provided'}
+${humanReviewContext}
 
 ## Repository Structure
 The repository has the following file structure:
@@ -232,34 +293,41 @@ ${contextContent || 'No context files found'}
 
 ## Your Task
 
-Analyze the task and break it down into subtasks. For each subtask:
-1. Identify which subproject it belongs to
-2. Provide a clear title and detailed description
-3. Identify dependencies between subtasks
+First, decide if this is a SIMPLE task or an EPIC task:
+- SIMPLE: Can be completed in a single PR, focused scope
+- EPIC: Requires multiple independent PRs, broad scope with 3+ distinct components
 
-Respond with a JSON object in this exact format:
-\`\`\`json
-{
-  "summary": "Brief summary of the overall approach",
-  "affectedSubprojects": ["path/to/subproject1", "path/to/subproject2"],
-  "subtasks": [
-    {
-      "subprojectPath": "packages/api",
-      "title": "Add user endpoint",
-      "description": "Create a new REST endpoint for user management with GET/POST/PUT/DELETE operations",
-      "dependsOn": [],
-      "files": ["src/routes/users.ts", "src/models/user.ts"]
-    }
-  ],
-  "estimatedComplexity": "medium"
-}
-\`\`\`
+Then, respond with JSON. See the system prompt for exact format examples.
+
+**For SIMPLE tasks:**
+- Use type: "simple"
+- Break into subtasks (internal, parallel execution, single PR)
+- Each subtask has subprojectPath, title, description, dependsOn, files
+
+**For EPIC tasks:**
+- Use type: "epic"
+- Define epicChildren (each becomes a separate GitHub issue and PR)
+- Each child has title, description, dependsOn (other child titles), estimatedComplexity
+- subtasks array should be empty for epics
+
+**IMPORTANT - Human Review:**
+If the task description is unclear, ambiguous, missing critical details, or you have questions that would significantly impact the implementation, set:
+- "needsHumanReview": true
+- "humanReviewQuestion": "Your specific question to the human"
+- "subtasks": [] (leave empty when requesting review)
+
+Examples of when to request human review:
+- Task says "improve performance" but doesn't specify which part
+- Task mentions a feature but doesn't clarify the expected behavior
+- Multiple valid interpretations exist and you need guidance
+- Technical decision needed (e.g., which library/approach to use)
 
 Important:
 - Each subtask should be focused and achievable by a single agent
 - Include dependencies if subtasks must be completed in a specific order
 - If the task affects shared code, create a subtask for that first
 - Keep subtask descriptions actionable and specific
+- When in doubt about requirements, request human review rather than guessing
     `;
 
     const response = await this.anthropic.messages.create({
@@ -280,20 +348,53 @@ Important:
       throw new Error('Could not parse decomposition response');
     }
 
-    const decomposition = JSON.parse(jsonMatch[1]) as TaskDecomposition;
+    const decomposition = JSON.parse(jsonMatch[1]) as TaskDecomposition & {
+      needsHumanReview?: boolean;
+      humanReviewQuestion?: string;
+    };
 
-    // Validate the response
-    if (!decomposition.subtasks || decomposition.subtasks.length === 0) {
-      // If no subtasks, create a single task for the whole repo
-      decomposition.subtasks = [
-        {
-          subprojectPath: '.',
-          title: this.task.title,
-          description: this.task.description || this.task.title,
-          dependsOn: [],
-          files: [],
-        },
-      ];
+    // Check if human review is requested
+    if (decomposition.needsHumanReview && decomposition.humanReviewQuestion) {
+      return {
+        ...decomposition,
+        type: decomposition.type || 'simple',
+        subtasks: [],
+        needsHumanReview: true,
+        humanReviewQuestion: decomposition.humanReviewQuestion,
+      };
+    }
+
+    // Ensure type is set (default to simple)
+    if (!decomposition.type) {
+      decomposition.type = 'simple';
+    }
+
+    // For EPIC tasks, validate epicChildren
+    if (decomposition.type === 'epic') {
+      if (!decomposition.epicChildren || decomposition.epicChildren.length === 0) {
+        // If marked as epic but no children, treat as simple
+        decomposition.type = 'simple';
+        logger.warn(
+          { taskId: this.task.id },
+          'Task marked as epic but no epicChildren provided, treating as simple'
+        );
+      }
+    }
+
+    // For SIMPLE tasks, validate subtasks
+    if (decomposition.type === 'simple') {
+      if (!decomposition.subtasks || decomposition.subtasks.length === 0) {
+        // If no subtasks, create a single task for the whole repo
+        decomposition.subtasks = [
+          {
+            subprojectPath: '.',
+            title: this.task.title,
+            description: this.task.description || this.task.title,
+            dependsOn: [],
+            files: [],
+          },
+        ];
+      }
     }
 
     return decomposition;

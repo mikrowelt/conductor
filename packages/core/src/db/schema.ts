@@ -23,6 +23,7 @@ export const taskStatusValues = [
   'decomposing',
   'executing',
   'review',
+  'human_review',
   'pr_created',
   'done',
   'failed',
@@ -70,7 +71,14 @@ export const tasks = pgTable(
     pullRequestNumber: integer('pull_request_number'),
     pullRequestUrl: text('pull_request_url'),
     errorMessage: text('error_message'),
+    humanReviewQuestion: text('human_review_question'),
+    humanReviewAnswer: text('human_review_answer'),
     retryCount: integer('retry_count').notNull().default(0),
+    // Epic support - tasks can be epics containing child tasks
+    isEpic: boolean('is_epic').notNull().default(false),
+    parentTaskId: uuid('parent_task_id'), // Reference to parent epic (null for top-level tasks)
+    linkedGithubIssueNumber: integer('linked_github_issue_number'), // GitHub issue number for this task
+    childDependencies: jsonb('child_dependencies').$type<string[]>().default([]), // Task titles this depends on (for child tasks)
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
     startedAt: timestamp('started_at'),
@@ -82,6 +90,8 @@ export const tasks = pgTable(
     ),
     statusIdx: index('tasks_status_idx').on(table.status),
     repositoryIdx: index('tasks_repository_idx').on(table.repositoryFullName),
+    parentTaskIdx: index('tasks_parent_task_idx').on(table.parentTaskId),
+    isEpicIdx: index('tasks_is_epic_idx').on(table.isEpic),
   })
 );
 
@@ -236,6 +246,8 @@ export const notifications = pgTable(
         | 'pr_created'
         | 'task_completed'
         | 'task_failed'
+        | 'human_review_needed'
+        | 'redo_requested'
       >(),
     channel: varchar('channel', { length: 20 })
       .notNull()
@@ -251,12 +263,19 @@ export const notifications = pgTable(
 );
 
 // Define relations
-export const tasksRelations = relations(tasks, ({ many }) => ({
+export const tasksRelations = relations(tasks, ({ one, many }) => ({
   subtasks: many(subtasks),
   agentRuns: many(agentRuns),
   pullRequests: many(pullRequests),
   codeReviews: many(codeReviews),
   notifications: many(notifications),
+  // Epic parent/child relationships
+  parentTask: one(tasks, {
+    fields: [tasks.parentTaskId],
+    references: [tasks.id],
+    relationName: 'epicChildren',
+  }),
+  childTasks: many(tasks, { relationName: 'epicChildren' }),
 }));
 
 export const subtasksRelations = relations(subtasks, ({ one, many }) => ({

@@ -17,7 +17,7 @@ import type { SubtaskJob } from '@conductor/core';
 import { transitionSubtaskStatus } from '../state-machine.js';
 import { SubAgent } from '@conductor/agents';
 import { createGitHubClient } from '../github-client.js';
-import { prepareWorkspace } from '../workspace.js';
+import { prepareWorkspace, ensureProjectDocs } from '../workspace.js';
 
 const logger = createLogger('subtask-processor');
 
@@ -74,6 +74,16 @@ export async function subtaskProcessor(job: Job<SubtaskJob>) {
       task,
       octokit,
     });
+
+    // Ensure CLAUDE.md and REQUIREMENTS.md exist (create from templates if missing)
+    const repoName = task.repositoryFullName.split('/')[1];
+    const docsCreated = await ensureProjectDocs(workspace.path, repoName);
+    if (docsCreated.claudeCreated || docsCreated.requirementsCreated) {
+      logger.info(
+        { taskId, claudeCreated: docsCreated.claudeCreated, requirementsCreated: docsCreated.requirementsCreated },
+        'Project documentation templates created'
+      );
+    }
 
     // Store branch name on task if not already set
     if (!task.branchName && workspace.branchName) {

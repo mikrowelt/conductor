@@ -116,7 +116,6 @@ Claude Code must keep REQUIREMENTS.md files updated whenever interfaces change. 
 - At any point, if agent is unsure about requirements:
   - Move task to Human Review
   - Add comment with specific questions
-  - Send Telegram notification
   - Wait for human to answer and move to Redo
 
 ### Redo Path
@@ -131,7 +130,6 @@ Claude Code must keep REQUIREMENTS.md files updated whenever interfaces change. 
 - If agent crashes or times out
 - Move task to Redo
 - Add comment explaining what happened
-- Send Telegram notification
 
 ---
 
@@ -177,7 +175,7 @@ Claude Code must keep REQUIREMENTS.md files updated whenever interfaces change. 
 Lives in the repo root. Should support:
 - Sub-project paths (or auto-detect)
 - Branch naming preferences
-- Notification settings (Telegram token/chat)
+- Notification settings (optional: Telegram, Slack, or webhook)
 - Environment URLs (staging, production)
 - Custom agent instructions (optional)
 - Feature flags (enable/disable code review, smoke tests, etc.)
@@ -196,9 +194,9 @@ Lives in the repo root. Should support:
 
 ---
 
-## Notifications
+## Notifications (Optional)
 
-Send Telegram messages for:
+Optionally send notifications via Telegram, Slack, or webhook for:
 - Task needs human review
 - Agent has questions
 - Task failed/errored
@@ -270,7 +268,7 @@ Claude Code must update these whenever changes affect interfaces. This is how ag
 4. **GitHub integration** - Read/update Projects board, create PRs, add comments
 5. **Orchestration** - Trigger when cards move, spawn agents, coordinate work
 6. **Deployment scripts** - Staging, preview environments, production
-7. **Notification system** - Telegram alerts (configurable per installation)
+7. **Notification system** - Optional alerts via Telegram, Slack, or webhook (configurable)
 8. **Logging** - Grafana integration (optional, configurable)
 9. **The file structure** - CLAUDE.md and REQUIREMENTS.md templates and management
 10. **Config schema** - Define what goes in `.claude-orchestrator.yml`
@@ -292,7 +290,7 @@ Before starting, Claude Code should clarify:
 ### For initial test/demo setup:
 - What are the actual sub-projects? (paths and names)
 - GitHub repo details (owner, repo name, project number)
-- Telegram bot token and chat ID
+- Notification setup (optional: Telegram, Slack, or webhook)
 - Staging/production server details
 - Database setup for preview environments
 - Any existing CI/CD to integrate with

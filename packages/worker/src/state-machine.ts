@@ -39,6 +39,8 @@ export async function transitionTaskStatus(
     branchName?: string;
     pullRequestNumber?: number;
     pullRequestUrl?: string;
+    humanReviewQuestion?: string;
+    humanReviewAnswer?: string;
   } = {}
 ): Promise<void> {
   const db = getDb();
@@ -79,6 +81,14 @@ export async function transitionTaskStatus(
 
   if (options.pullRequestUrl !== undefined) {
     updateData.pullRequestUrl = options.pullRequestUrl;
+  }
+
+  if (options.humanReviewQuestion !== undefined) {
+    updateData.humanReviewQuestion = options.humanReviewQuestion;
+  }
+
+  if (options.humanReviewAnswer !== undefined) {
+    updateData.humanReviewAnswer = options.humanReviewAnswer;
   }
 
   // Set timestamps based on status
