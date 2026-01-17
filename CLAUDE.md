@@ -125,38 +125,28 @@ The manual trigger endpoint (`POST /api/trigger`) has been tested and works:
 - PR #4: Add sign function
 - PR #5: Add average function
 
-### GitHub Projects Integration (NEEDS YOUR ACTION)
+### GitHub Projects Integration
 
-The GitHub App and CLI need additional project permissions to work with GitHub Projects boards.
+**Status**: Webhook signature verification is working. However, GitHub has a limitation where `projects_v2_item` webhooks are NOT sent for user-owned projects - only organization-owned projects receive these webhooks.
 
-**Current App Permissions**:
-- `contents: write` ✓
-- `issues: write` ✓
-- `pull_requests: write` ✓
-- `organization_projects: write` ✓
-- `projects (user-level): ❌ MISSING`
+**Project Board Created**:
+- Project: "Conductor Test Board" (project #1)
+- Columns: Icebox, Todo, In Progress, Human Review, Done, Redo
+- URL: https://github.com/users/mikrowelt/projects/1
 
-**Step 1: Authorize gh CLI for project scope**:
-Open: https://github.com/login/device
-Enter code when prompted by `gh auth refresh -h github.com -s project,read:project`
-
-**Step 2: Update GitHub App permissions**:
-Go to: https://github.com/settings/apps/conductorboss/permissions
-- Set `Repository permissions > Projects` to **Read and write**
-- Set `Account permissions > Projects` to **Read and write**
-- Save and accept new permissions at https://github.com/settings/installations
-
-**Step 3: Create GitHub Project**:
-After completing steps 1-2, run:
+**Current Workaround**: Use the manual trigger endpoint instead of project card movements:
 ```bash
-gh project create --owner mikrowelt --title "Conductor Test"
+curl -X POST http://38.180.136.39:3000/api/trigger \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repositoryFullName": "mikrowelt/conductor-test-repo",
+    "installationId": 104580643,
+    "title": "Your task title",
+    "description": "Task description"
+  }'
 ```
 
-**Step 4: Test the flow**:
-1. Create an issue in conductor-test-repo
-2. Add it to the project board
-3. Move the card to "Todo" column
-4. Watch: `ssh root@38.180.136.39 'tail -f /var/log/conductor-webhook.log'`
+**For Full GitHub Projects Integration**: Create an organization and use org-owned projects. Org-owned projects DO trigger `projects_v2_item` webhooks to GitHub Apps.
 
 ---
 
