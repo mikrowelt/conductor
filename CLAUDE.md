@@ -123,13 +123,31 @@ The manual trigger endpoint (`POST /api/trigger`) has been tested and works:
 - PR #3: Add min function
 - PR #4: Add sign function
 
-### GitHub Projects Integration (Pending)
-To test the full workflow as described in ORIGINAL_PROMPT.md:
-1. Create a GitHub Project board with columns: Icebox, Todo, In Progress, Human Review, Done, Redo
-2. Create issues and link them to the project
-3. Move cards to "Todo" column
-4. Verify webhooks trigger Conductor
-5. Verify full flow: Todo → In Progress → Human Review → Done
+### GitHub Projects Integration (NEEDS YOUR ACTION)
+
+**Step 1: Add project scope to GitHub CLI** (run in terminal):
+```bash
+gh auth refresh -h github.com -s project,read:project
+```
+This will open a browser - authorize the additional scopes.
+
+**Step 2: Update GitHub App permissions**:
+Go to: https://github.com/settings/apps/conductorboss/permissions
+- Set `Repository permissions > Projects` to **Read and write**
+- Set `Account permissions > Projects` to **Read and write**
+- Save and accept new permissions at https://github.com/settings/installations
+
+**Step 3: Create GitHub Project**:
+After completing steps 1-2, run:
+```bash
+gh project create --owner mikrowelt --title "Conductor Test"
+```
+
+**Step 4: Test the flow**:
+1. Create an issue in conductor-test-repo
+2. Add it to the project board
+3. Move the card to "Todo" column
+4. Watch: `ssh root@38.180.136.39 'tail -f /var/log/conductor-webhook.log'`
 
 ---
 
